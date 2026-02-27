@@ -30,3 +30,7 @@ docker-compose.override.yml
 
 # Data (keep structure, ignore large files)
 data/knowledge/*.pdf
+implementation_plan.md
+
+# Qdrant local storage
+qdrant_data/

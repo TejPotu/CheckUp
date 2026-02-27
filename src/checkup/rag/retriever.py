@@ -13,18 +13,24 @@ from checkup.config import settings
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_MODEL = "models/embedding-001"
+EMBEDDING_MODEL = "models/gemini-embedding-001"
 TOP_K = 5
 
 
 def _get_vector_store() -> QdrantVectorStore:
-    """Return a QdrantVectorStore instance."""
+    """Return a QdrantVectorStore instance (local or remote)."""
     embeddings = GoogleGenerativeAIEmbeddings(
         model=EMBEDDING_MODEL,
         google_api_key=settings.google_api_key,
     )
+
+    if settings.qdrant_path:
+        client = QdrantClient(path=settings.qdrant_path)
+    else:
+        client = QdrantClient(url=settings.qdrant_url)
+
     return QdrantVectorStore(
-        client=QdrantClient(url=settings.qdrant_url),
+        client=client,
         collection_name=settings.qdrant_collection,
         embedding=embeddings,
     )

@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 200
-EMBEDDING_MODEL = "models/embedding-001"
-VECTOR_DIMENSION = 768  # dimension for embedding-001
+EMBEDDING_MODEL = "models/gemini-embedding-001"
+VECTOR_DIMENSION = 3072  # default dimension for gemini-embedding-001
 
 
 def get_embeddings() -> GoogleGenerativeAIEmbeddings:
@@ -31,7 +31,10 @@ def get_embeddings() -> GoogleGenerativeAIEmbeddings:
 
 
 def get_qdrant_client() -> QdrantClient:
-    """Return a Qdrant client."""
+    """Return a Qdrant client (local file-based or remote server)."""
+    if settings.qdrant_path:
+        logger.info("Using local Qdrant at path: %s", settings.qdrant_path)
+        return QdrantClient(path=settings.qdrant_path)
     return QdrantClient(url=settings.qdrant_url)
 
 
@@ -68,24 +71,36 @@ async def ingest_documents(data_dir: str | Path = "data/knowledge") -> int:
     chunks = splitter.split_documents(documents)
     logger.info("Split into %d chunks", len(chunks))
 
-    # Ensure Qdrant collection exists
-    client = get_qdrant_client()
-    collections = [c.name for c in client.get_collections().collections]
-    if settings.qdrant_collection not in collections:
-        client.create_collection(
-            collection_name=settings.qdrant_collection,
-            vectors_config=VectorParams(size=VECTOR_DIMENSION, distance=Distance.COSINE),
-        )
-        logger.info("Created Qdrant collection '%s'", settings.qdrant_collection)
-
-    # Embed and store
+    # Embed and store — use a single client to avoid lock conflicts
     embeddings = get_embeddings()
-    QdrantVectorStore.from_documents(
-        documents=chunks,
-        embedding=embeddings,
-        url=settings.qdrant_url,
-        collection_name=settings.qdrant_collection,
-    )
-    logger.info("Ingested %d chunks into Qdrant", len(chunks))
 
+    if settings.qdrant_path:
+        # Local mode: use from_documents with force_recreate to handle
+        # collection creation and data insertion in one client session.
+        QdrantVectorStore.from_documents(
+            documents=chunks,
+            embedding=embeddings,
+            path=settings.qdrant_path,
+            collection_name=settings.qdrant_collection,
+            force_recreate=True,
+        )
+    else:
+        # Server mode: ensure collection exists, then insert
+        client = QdrantClient(url=settings.qdrant_url)
+        collections = [c.name for c in client.get_collections().collections]
+        if settings.qdrant_collection not in collections:
+            client.create_collection(
+                collection_name=settings.qdrant_collection,
+                vectors_config=VectorParams(size=VECTOR_DIMENSION, distance=Distance.COSINE),
+            )
+            logger.info("Created Qdrant collection '%s'", settings.qdrant_collection)
+
+        QdrantVectorStore.from_documents(
+            documents=chunks,
+            embedding=embeddings,
+            url=settings.qdrant_url,
+            collection_name=settings.qdrant_collection,
+        )
+
+    logger.info("Ingested %d chunks into Qdrant", len(chunks))
     return len(chunks)

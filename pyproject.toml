@@ -12,6 +12,7 @@ dependencies = [
     # LangGraph & LangChain
     "langgraph>=0.2.0",
     "langchain>=0.3.0",
+    "langchain-community>=0.3.0",
     "langchain-google-genai>=2.0.0",
     "langchain-text-splitters>=0.3.0",
     "langgraph-checkpoint-postgres>=2.0.0",
@@ -47,7 +48,7 @@ dev = [
 
 [build-system]
 requires = ["setuptools>=75.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]

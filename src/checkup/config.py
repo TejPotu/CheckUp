@@ -26,7 +26,10 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # --- Qdrant ---
+    # Set qdrant_path for local file storage (no Docker needed).
+    # Leave empty to connect to a Qdrant server via qdrant_url.
     qdrant_url: str = "http://localhost:6333"
+    qdrant_path: str = "./qdrant_data"
     qdrant_collection: str = "elderly_health"
 
     # --- App ---
