@@ -38,6 +38,10 @@ class MetaWhatsAppClient:
         Returns:
             API response dict.
         """
+        if not self.token:
+            logger.info("[DEV] Would send to %s: %s", to, body[:120])
+            return {}
+
         payload = {
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
@@ -70,6 +74,10 @@ class MetaWhatsAppClient:
         Returns:
             API response dict.
         """
+        if not self.token:
+            logger.info("[DEV] Would send template '%s' to %s", template_name, to)
+            return {}
+
         payload: dict[str, Any] = {
             "messaging_product": "whatsapp",
             "to": to,

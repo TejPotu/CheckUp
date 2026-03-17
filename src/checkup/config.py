@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Absolute path to the project root (two levels up from src/checkup/).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
@@ -29,7 +34,7 @@ class Settings(BaseSettings):
     # Set qdrant_path for local file storage (no Docker needed).
     # Leave empty to connect to a Qdrant server via qdrant_url.
     qdrant_url: str = "http://localhost:6333"
-    qdrant_path: str = "./qdrant_data"
+    qdrant_path: str = str(_PROJECT_ROOT / "qdrant_data")
     qdrant_collection: str = "elderly_health"
 
     # --- App ---

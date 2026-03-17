@@ -9,7 +9,7 @@
 
 ### LangGraph Agent
 - [x] `ConversationState` TypedDict (12 fields)
-- [x] StateGraph with 6 nodes: `detect_language → route → (health_qa | checkin | escalate) → respond`
+- [x] StateGraph with 7 nodes: `detect_language → route → (health_qa | checkin | escalate | register) → respond`
 - [x] Conditional routing by intent (5 categories: `health_qa`, `checkin`, `medication`, `escalate`, `register`)
 - [x] Post-checkin escalation for high-risk responses
 - [x] Verified end-to-end in notebook ✅
@@ -25,8 +25,8 @@
 - [x] 4 seed health documents (geriatric health, medications, chronic conditions, emergencies)
 - [x] 21 chunks ingested into local file-based Qdrant
 - [x] Embedding model updated to `gemini-embedding-001`
+- [x] RAG path bug fixed — `qdrant_path` now defaults to absolute project root path
 - [x] Local Qdrant mode (no Docker needed)
-- [x] **BUG:** RAG retrieval fails in notebook ("Collection not found") — likely a CWD/path issue since notebook runs from `notebooks/` but `qdrant_data/` is at project root
 
 ### Meta WhatsApp Integration
 - [x] Meta Cloud API client (`meta_client.py`) — send text, send template
@@ -37,7 +37,24 @@
 - [x] SQLAlchemy models: `ParentProfile`, `HealthLog`, `ScheduledReminder`
 - [x] Scheduling engine: medication reminders, weekly trends, missed check-in detection
 - [x] Celery Beat tasks: daily check-in (9 AM), med reminders (30 min), missed alert (11 AM), weekly summary (Sunday)
+- [x] All 4 Celery tasks wired to DB — query active parents, send messages via meta_client
 - [x] Verified: all 18 unit tests pass ✅
+
+### Database & Migrations
+- [x] Alembic configured for async SQLAlchemy (psycopg v3 driver)
+- [x] Initial migration: `alembic/versions/001_initial_schema.py`
+- [x] `psycopg[async]` added to dependencies (required by LangGraph checkpointer)
+- [x] Caregiver alert routing: DB lookup for caregiver phone in `webhooks.py`
+- [x] HealthLog persisted after each check-in interaction
+
+### Conversation Memory
+- [x] `AsyncPostgresSaver` checkpointer wired into graph compilation via FastAPI lifespan
+- [x] Gracefully falls back to stateless graph if Postgres is unavailable
+
+### Parent Registration
+- [x] `register` node implemented (`nodes/register.py`) — LLM extracts profile from free-text
+- [x] Saves `ParentProfile` to DB on first registration, returns summary if already registered
+- [x] Graph updated to route `register` intent to new node
 
 ### Documentation & DevOps
 - [x] README with architecture, quick start, project structure
@@ -49,8 +66,7 @@
 ## 🔧 In Progress
 
 ### RAG in Full Agent Flow
-- [ ] Fix notebook RAG path issue (collection not found when running from `notebooks/`)
-- [ ] Re-test full agent flow with RAG context grounding
+- [ ] Re-test full agent flow with RAG context grounding now that path bug is fixed
 
 ---
 
@@ -118,36 +134,25 @@
 
 ## 📋 Next Steps (Priority Order)
 
-### 1. Fix RAG in Notebook
-- The `qdrant_path` defaults to `./qdrant_data` (relative), but the notebook CWD is `notebooks/`
-- Fix: use absolute path or adjust CWD in notebook setup cell
+### 1. Re-verify RAG in Notebook
+- Path bug is fixed — re-run verify_agent.ipynb to confirm RAG retrieval works
 
-### 2. Wire Up Celery Tasks with DB
-- The 4 Celery tasks (`daily_checkin_scan`, `missed_checkin_alert_scan`, `medication_reminder_scan`, `weekly_summary`) have `TODO` placeholders
-- Need: actual DB queries to fetch active parents, their medications, and health logs
-- Depends on: Postgres running (or SQLite for local testing)
-
-### 3. Database Setup (Local)
-- Create Alembic migration from SQLAlchemy models
-- Option A: Use SQLite for local testing (no Docker)
-- Option B: Use Docker Postgres
-- Register a test parent profile and verify CRUD
-
-### 4. Webhook End-to-End Test
+### 2. Webhook End-to-End Test
 - Use `curl` or FastAPI `TestClient` with realistic Meta Cloud API payloads
 - Test: inbound Telugu message → agent response → outbound message format
-- Add proper Meta signature validation
+- Add proper Meta signature validation (wire `verify_signature` into POST handler)
 
-### 5. Conversation Memory
-- Wire up `memory.py` (Postgres checkpointer) or use SQLite checkpoint for local testing
-- Test: multi-turn conversation context is preserved between messages
+### 3. Run Alembic Migration
+```bash
+alembic upgrade head
+```
+- Requires Postgres running and `DATABASE_URL` set in `.env`
 
-### 6. Parent Registration Flow
-- Implement the `register` intent handler
-- Collect: parent name, age, conditions, medications, caregiver phone
-- Store in `ParentProfile` table
+### 4. Test Multi-Turn Memory
+- Start server with Postgres running, send 2-3 messages from same phone number
+- Verify `AsyncPostgresSaver` preserves context across turns
 
-### 7. Deployment
+### 5. Deployment
 - Set up Meta Business Manager + WhatsApp Business Account
 - Configure webhook URL (ngrok for dev, cloud for prod)
 - Deploy to cloud (Railway, Render, or GCP Cloud Run)

@@ -2,22 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Request, Response, HTTPException
 from langchain_core.messages import HumanMessage
+from sqlalchemy import select
 
-from checkup.agent.graph import compile_graph
 from checkup.config import settings
 from checkup.messaging.meta_client import meta_client
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["webhooks"])
-
-# Compile graph once (without checkpointer for now; add in production)
-_graph = compile_graph()
 
 
 @router.get("/webhook")
@@ -45,24 +42,30 @@ async def handle_inbound(request: Request) -> dict[str, str]:
     """Handle inbound WhatsApp messages from Meta.
 
     Flow:
-    1. Parse the inbound message.
-    2. Invoke the LangGraph agent with the message.
-    3. Send the response back via WhatsApp.
-    4. If a caregiver alert is set, send it to the caregiver.
+    1. Verify Meta's HMAC-SHA256 signature (if META_APP_SECRET is set).
+    2. Parse the inbound message.
+    3. Invoke the LangGraph agent with the message.
+    4. Send the response back via WhatsApp.
+    5. Persist a HealthLog if this was a check-in.
+    6. If a caregiver alert is set, look up the caregiver and send it.
     """
-    payload = await request.json()
+    raw_body = await request.body()
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    if not meta_client.verify_signature(raw_body, signature):
+        raise HTTPException(status_code=403, detail="Invalid signature")
 
-    # Parse the inbound message
+    payload = json.loads(raw_body)
+
     parsed = meta_client.parse_inbound(payload)
     if not parsed:
-        # Not a text message (could be a status update) — acknowledge silently
         return {"status": "ok"}
 
     from_number = parsed["from_number"]
     body = parsed["body"]
     logger.info("Inbound from %s: %s", from_number, body[:80])
 
-    # Invoke the LangGraph agent
+    graph = request.app.state.graph
+
     initial_state = {
         "messages": [HumanMessage(content=body)],
         "user_phone": from_number,
@@ -79,32 +82,86 @@ async def handle_inbound(request: Request) -> dict[str, str]:
     }
 
     try:
-        result = await _graph.ainvoke(
+        result = await graph.ainvoke(
             initial_state,
             config={"configurable": {"thread_id": from_number}},
         )
 
-        # Send the response back to the parent
         response_text = result.get("response_text", "")
         if response_text:
             await meta_client.send_text(from_number, response_text)
 
-        # Send caregiver alert if needed
+        # Persist a HealthLog entry for check-in interactions.
+        if result.get("intent") == "checkin":
+            await _save_health_log(
+                from_number=from_number,
+                data=result.get("health_summary") or {},
+                risk_level=result.get("risk_level") or "low",
+            )
+
+        # Send caregiver alert if needed.
         caregiver_alert = result.get("caregiver_alert")
         if caregiver_alert:
-            # TODO: Look up caregiver phone from parent profile
-            # For now, log the alert
-            logger.warning("CAREGIVER ALERT for %s: %s", from_number, caregiver_alert)
+            await _send_caregiver_alert(from_number, caregiver_alert)
 
     except Exception as e:
         logger.error("Error processing message from %s: %s", from_number, e, exc_info=True)
-        # Send a generic error response
         await meta_client.send_text(
             from_number,
-            "🙏 Sorry, I encountered an issue. Please try again or contact your family member."
+            "🙏 Sorry, I encountered an issue. Please try again or contact your family member.",
         )
 
     return {"status": "ok"}
+
+
+async def _save_health_log(from_number: str, data: dict, risk_level: str) -> None:
+    """Persist a HealthLog row for the parent identified by phone number."""
+    from datetime import datetime
+    from checkup.db.session import async_session
+    from checkup.scheduler.models import ParentProfile, HealthLog
+
+    try:
+        async with async_session() as session:
+            profile_result = await session.execute(
+                select(ParentProfile).where(ParentProfile.parent_phone == from_number)
+            )
+            profile = profile_result.scalar_one_or_none()
+            if not profile:
+                return
+
+            log = HealthLog(
+                parent_id=profile.id,
+                timestamp=datetime.utcnow(),
+                log_type="checkin",
+                data=data,
+                risk_level=risk_level,
+            )
+            session.add(log)
+            await session.commit()
+            logger.debug("Saved HealthLog for parent %d (risk=%s)", profile.id, risk_level)
+    except Exception as e:
+        logger.error("Failed to save health log for %s: %s", from_number, e)
+
+
+async def _send_caregiver_alert(from_number: str, alert_message: str) -> None:
+    """Look up the caregiver phone for the given parent and send the alert."""
+    from checkup.db.session import async_session
+    from checkup.scheduler.models import ParentProfile
+
+    try:
+        async with async_session() as session:
+            result = await session.execute(
+                select(ParentProfile).where(ParentProfile.parent_phone == from_number)
+            )
+            profile = result.scalar_one_or_none()
+
+        if profile and profile.caregiver_phone:
+            await meta_client.send_text(profile.caregiver_phone, alert_message)
+            logger.info("Caregiver alert sent to %s for parent %s", profile.caregiver_phone, from_number)
+        else:
+            logger.warning("No caregiver phone found for parent %s — alert not sent", from_number)
+    except Exception as e:
+        logger.error("Failed to send caregiver alert for %s: %s", from_number, e)
 
 
 @router.post("/status")

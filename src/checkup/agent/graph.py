@@ -12,6 +12,7 @@ from checkup.agent.nodes.router import route
 from checkup.agent.nodes.health_qa import health_qa
 from checkup.agent.nodes.checkin import checkin
 from checkup.agent.nodes.escalation import escalate
+from checkup.agent.nodes.register import register
 from checkup.language.detector import detect_language
 from checkup.language.translator import translate_to_english, translate_response
 
@@ -52,11 +53,12 @@ async def respond_node(state: ConversationState) -> dict[str, Any]:
 def route_by_intent(state: ConversationState) -> str:
     """Route to the appropriate node based on classified intent."""
     intent = state.get("intent", "health_qa")
-    if intent in ("escalate",):
+    if intent == "escalate":
         return "escalate"
     if intent in ("checkin", "medication"):
         return "checkin"
-    # health_qa, register, and fallback
+    if intent == "register":
+        return "register"
     return "health_qa"
 
 
@@ -80,6 +82,7 @@ def build_graph() -> StateGraph:
     graph.add_node("health_qa", health_qa)
     graph.add_node("checkin", checkin)
     graph.add_node("escalate", escalate)
+    graph.add_node("register", register)
     graph.add_node("respond", respond_node)
 
     # Set entry point
@@ -92,9 +95,11 @@ def build_graph() -> StateGraph:
         "health_qa": "health_qa",
         "checkin": "checkin",
         "escalate": "escalate",
+        "register": "register",
     })
 
     graph.add_edge("health_qa", "respond")
+    graph.add_edge("register", "respond")
 
     graph.add_conditional_edges("checkin", should_escalate_after_checkin, {
         "escalate": "escalate",

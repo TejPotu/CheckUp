@@ -47,6 +47,7 @@ python -c "import asyncio; from checkup.rag.ingest import ingest_documents; asyn
 - `health_qa.py` — retrieves RAG context from Qdrant, answers with Gemini
 - `checkin.py` — processes daily check-in, runs two Gemini calls to assess risk (low/medium/high)
 - `escalation.py` — sends emergency template, marks `risk_level = "high"`, triggers caregiver alert
+- `register.py` — LLM-extracts profile fields from free-text, saves `ParentProfile` to DB
 
 Conditional edge after `checkin`: routes to `escalate` if `risk_level == "high"`, otherwise to `respond`.
 
@@ -61,10 +62,9 @@ Conditional edge after `checkin`: routes to `escalate` if `risk_level == "high"`
 
 **Config:** All settings loaded from `.env` via `pydantic-settings` in `config.py`. See `.env.example` for required variables (`GOOGLE_API_KEY`, `META_WHATSAPP_TOKEN`, `META_PHONE_NUMBER_ID`) and optional ones.
 
-## Known Incomplete Areas (see TODO.md)
+**DB migrations:** `alembic upgrade head` applies the initial schema. `alembic/env.py` is configured for async SQLAlchemy using `psycopg` (v3) — not `asyncpg`.
 
-- **Celery tasks** — all 4 tasks in `scheduler/tasks.py` have `TODO` stubs and don't yet query DB or send messages
-- **Multi-turn memory** — `AsyncPostgresSaver` in `agent/memory.py` exists but is not wired into the graph compilation in `webhooks.py`
-- **Parent registration** — `register` intent falls through to `health_qa`; actual registration flow not implemented
-- **Caregiver alert routing** — webhook handler logs the alert but doesn't look up caregiver phone from DB
-- **Qdrant path** — `qdrant_path = "./qdrant_data"` is relative; when running from `notebooks/`, the collection is not found (data lives at project root)
+## Remaining Work (see TODO.md)
+
+- **Webhook end-to-end test** — no integration tests for inbound Meta payloads; needs manual `curl` testing against a running server
+- **Deployment** — Meta Business Manager setup, webhook URL config, cloud deploy
