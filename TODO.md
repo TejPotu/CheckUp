@@ -26,7 +26,7 @@
 - [x] 21 chunks ingested into local file-based Qdrant
 - [x] Embedding model updated to `gemini-embedding-001`
 - [x] Local Qdrant mode (no Docker needed)
-- [ ] **BUG:** RAG retrieval fails in notebook ("Collection not found") — likely a CWD/path issue since notebook runs from `notebooks/` but `qdrant_data/` is at project root
+- [x] **BUG:** RAG retrieval fails in notebook ("Collection not found") — likely a CWD/path issue since notebook runs from `notebooks/` but `qdrant_data/` is at project root
 
 ### Meta WhatsApp Integration
 - [x] Meta Cloud API client (`meta_client.py`) — send text, send template
@@ -68,16 +68,16 @@
   - **Expected:** Should pull from `medication_safety.md` ("take with meals to reduce stomach upset")
 
 ### 2. Database Layer — CRUD Operations
-- [ ] Set up local DB (SQLite or Postgres)
-- [ ] Run `alembic` migrations or `Base.metadata.create_all()` to create tables
-- [ ] Insert a test `ParentProfile`:
+- [x] Set up local DB (SQLite or Postgres)
+- [x] Run `alembic` migrations or `Base.metadata.create_all()` to create tables
+- [x] Insert a test `ParentProfile`:
   ```python
   # name="Amma", age=68, conditions=["diabetes","hypertension"], 
   # medications=[{"name":"Metformin","dosage":"500mg","times":["08:00","20:00"]}]
   ```
-- [ ] Query the profile back and verify all fields
-- [ ] Insert a `HealthLog` entry and verify it links to the parent
-- [ ] Insert a `ScheduledReminder` and verify sent/acknowledged flags
+- [x] Query the profile back and verify all fields
+- [x] Insert a `HealthLog` entry and verify it links to the parent
+- [x] Insert a `ScheduledReminder` and verify sent/acknowledged flags
 
 ### 3. Webhook — Full Pipeline with Mock Payloads
 - [ ] Test webhook verification handshake:
@@ -151,3 +151,14 @@
 - Set up Meta Business Manager + WhatsApp Business Account
 - Configure webhook URL (ngrok for dev, cloud for prod)
 - Deploy to cloud (Railway, Render, or GCP Cloud Run)
+
+---
+
+## 🚀 Future Features
+
+### Past Medical Records & Tests
+- [ ] **Database Models:** Add `MedicalRecord` and `VitalsReading` (e.g., HbA1c, fasting sugar, blood pressure).
+- [ ] **Data Ingestion:** Allow users/caregivers to upload PDF reports or images (via WhatsApp) to parse and store test results.
+- [ ] **Personalized RAG:** Connect past medical records and test results into the agent's context.
+  - _Example:_ Agent can reference historical data: "Your blood pressure was high last week, so please maintain your salt limits today."
+- [ ] **Caregiver Summaries:** Generate weekly "Doctor Visit Ready" summaries combining health check logs and recent vitals/lab tests.
